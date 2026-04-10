@@ -442,10 +442,7 @@ EOF
 
 | Name | Role | Contact |
 |------|------|---------|
-| **Abhishek** | Model architecture, training, evaluation | abhishek.2020@vitstudent.ac.in |
-| **Sandhiya R** | Data preprocessing, feature engineering | sandhiya.r2020@vitstudent.ac.in |
-| **Abu Talha** | BLIP integration, inference pipeline | muhammedabutalha.sa2020@vitstudent.ac.in |
-| **Manimaran A** | Faculty supervisor | manimaran.a@vit.ac.in |
+| **Abhishek** | Model architecture, training, evaluation , BLIP integration| abhishek.2020@vitstudent.ac.in |
 
 **Institution:** School of Advanced Sciences, Vellore Institute of Technology (VIT), Vellore
 
@@ -463,5 +460,5 @@ EOF
 ---
 
 <div align="center">
-  <sub>Built with ❤️ at VIT Vellore · School of Advanced Sciences · 2024–2025</sub>
+  <sub>Built by Abhishek at VIT Vellore · School of Advanced Sciences · 2024–2025</sub>
 </div>
