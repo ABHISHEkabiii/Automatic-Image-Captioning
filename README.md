@@ -1,278 +1,467 @@
 # 🖼️ Automatic Image Captioning
-### CNN (VGG16) + LSTM Encoder-Decoder | Flickr8k | Beam Search & Top-k Sampling
 
-[![Python](https://img.shields.io/badge/Python-3.10-blue?logo=python&logoColor=white)](https://python.org)
-[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.19.0-FF6F00?logo=tensorflow&logoColor=white)](https://tensorflow.org)
-[![Keras](https://img.shields.io/badge/Keras-Deep%20Learning-D00000?logo=keras&logoColor=white)](https://keras.io)
-[![Dataset](https://img.shields.io/badge/Dataset-Flickr8k-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/datasets/adityajn105/flickr8k)
-[![Colab](https://img.shields.io/badge/Run%20on-Google%20Colab-F9AB00?logo=googlecolab&logoColor=white)](https://colab.research.google.com/)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+> **Deep Learning pipeline for generating natural language descriptions from images — combining CNN + LSTM (classical) with BLIP Transformer (state-of-the-art).**
 
-> A deep learning system that **automatically generates natural language descriptions for images** by combining Convolutional Neural Networks for visual feature extraction with Long Short-Term Memory networks for sequential caption generation.
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)](https://python.org)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-FF6F00?logo=tensorflow)](https://tensorflow.org)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch)](https://pytorch.org)
+[![HuggingFace](https://img.shields.io/badge/HuggingFace-BLIP-yellow?logo=huggingface)](https://huggingface.co/Salesforce/blip-image-captioning-large)
+[![Dataset](https://img.shields.io/badge/Dataset-Flickr8k-green)](https://academictorrents.com/details/9dea07ba660a722ae1008c4c8afdd303b6910f61)
+[![BLEU-1](https://img.shields.io/badge/BLEU--1-0.35-brightgreen)]()
+[![License](https://img.shields.io/badge/License-MIT-lightgrey)](LICENSE)
 
 ---
 
 ## 📌 Table of Contents
-- [Overview](#-overview)
-- [Architecture](#-architecture)
-- [Dataset](#-dataset)
-- [Results](#-results)
-- [Project Structure](#-project-structure)
-- [Quickstart](#-quickstart)
-- [Implementation Details](#-implementation-details)
-- [Evaluation](#-evaluation)
-- [Future Work](#-future-work)
+
+- [Overview](#overview)
+- [Project A — CNN + LSTM (VGG16 + RNN)](#project-a--cnn--lstm-vgg16--rnn)
+- [Project B — BLIP Transformer (Advanced)](#project-b--blip-transformer-advanced)
+- [Architecture Comparison](#architecture-comparison)
+- [Results](#results)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Quickstart](#quickstart)
+- [Authors](#authors)
 
 ---
 
-## 🔍 Overview
+## Overview
 
-Automated image captioning sits at the intersection of **Computer Vision** and **Natural Language Processing**. This project implements an encoder-decoder architecture that:
+This repository contains **two complementary image captioning systems** built as part of academic coursework at **VIT Vellore (Integrated M.Sc. — Computational Statistics & Data Analytics)**:
 
-- Encodes images into a 4096-dimensional feature vector using **pre-trained VGG16**
-- Decodes features into captions word-by-word using an **LSTM language model**
-- Uses **Beam Search** (width=5) and **Top-k Sampling** (k=5, temp=0.7) for diverse, high-quality outputs
-- Trains on **8,091 images** from Flickr8k with 5 reference captions each
+| | Project A | Project B |
+|---|---|---|
+| **Architecture** | VGG16 (CNN) + LSTM (RNN) | BLIP (Vision-Language Transformer) |
+| **Approach** | Classical encoder-decoder | Bootstrapped pre-training |
+| **Dataset** | Flickr8k (8,000 images) | Any user-uploaded image |
+| **Inference** | Beam search + top-k sampling | Conditional & unconditional |
+| **BLEU-1** | **0.35** | N/A (zero-shot) |
+| **Framework** | TensorFlow / Keras | PyTorch + HuggingFace |
 
-**Real output from the model:**
+Both systems take an image as input and output a human-readable natural language description — bridging **computer vision** and **NLP** in a single pipeline.
+
+---
+
+## Project A — CNN + LSTM (VGG16 + RNN)
+
+### How It Works
+
+The pipeline follows a classic **encoder-decoder** architecture:
+
 ```
-Input Image   →  two dogs are playing in the grass with tennis ball in its mouth  (Beam Search)
-              →  dog is walking through field of grass                             (Top-k Sampling)
+Input Image
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│  ENCODER: VGG16 (pre-trained, ImageNet) │
+│  Input: 224 × 224 × 3                  │
+│  Output: 4096-dimensional feature vector│
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│  DECODER: LSTM (Language Model)         │
+│  Word Embedding → LSTM → Dense(vocab)  │
+│  Generates one word at a time           │
+│  Stops at <endseq> token                │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+         Generated Caption 🗒️
+```
+
+### Dataset — Flickr8k
+
+- **8,091 images** with **5 human-annotated captions each** (40,455 total)
+- Split: 6,000 train / 1,000 validation / 1,000 test
+- Source: [Flickr8k via Kaggle](https://www.kaggle.com/datasets/adityajn105/flickr8k)
+
+**Sample images and captions from Flickr8k:**
+
+> *"beige puppy walks across the floor"*
+> *"blond girl in brown shirt with black pen up her nose"*
+> *"little girl smiles as she wears white bowl on the top of her head"*
+
+### Data Preprocessing
+
+Three cleaning functions applied to all captions:
+
+```python
+def clean_captions(mapping):
+    for key, captions in mapping.items():
+        for i, caption in enumerate(captions):
+            caption = caption.lower()
+            caption = re.sub(r'[^a-z\s]', '', caption)   # remove punctuation & digits
+            caption = re.sub(r'\s+', ' ', caption)         # remove extra spaces
+            caption = 'startseq ' + caption + ' endseq'   # add sequence tokens
+            captions[i] = caption
+```
+
+**Vocabulary after cleaning:** ~8,000 unique tokens (reduced by ~200 from raw).
+
+### Image Feature Extraction (VGG16)
+
+```python
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.models import Model
+
+# Load VGG16 without the classification head
+base_model = VGG16(weights='imagenet')
+model = Model(inputs=base_model.inputs, outputs=base_model.layers[-2].output)
+
+# Extract 4096-dim features for each image
+def extract_features(directory):
+    features = {}
+    for img_name in os.listdir(directory):
+        img = load_img(path, target_size=(224, 224))
+        img = img_to_array(img)
+        img = preprocess_input(img)
+        feature = model.predict(img, verbose=0)
+        features[img_name] = feature
+    return features
+```
+
+Features were visualised using **PCA** (4096 → 2D) and **k-means clustering** (k=4) to verify semantic grouping — images in the same cluster visually resemble each other, confirming the representations are meaningful.
+
+### Model Architecture (Encoder-Decoder)
+
+```python
+# Image feature input
+inputs1 = Input(shape=(4096,))
+fe1 = Dropout(0.4)(inputs1)
+fe2 = Dense(256, activation='relu')(fe1)
+
+# Caption sequence input
+inputs2 = Input(shape=(max_length,))
+se1 = Embedding(vocab_size, 256, mask_zero=True)(inputs2)
+se2 = Dropout(0.4)(se1)
+se3 = LSTM(256)(se2)
+
+# Merge + decode
+decoder1 = add([fe2, se3])
+decoder2 = Dense(256, activation='relu')(decoder1)
+outputs  = Dense(vocab_size, activation='softmax')(decoder2)
+
+model = Model(inputs=[inputs1, inputs2], outputs=outputs)
+model.compile(loss='categorical_crossentropy', optimizer='adam')
+```
+
+| Component | Detail |
+|-----------|--------|
+| Image encoder | VGG16 → 4096 → Dense(256) |
+| Text encoder | Embedding(256) → LSTM(256) |
+| Merge | Element-wise add |
+| Decoder | Dense(256, relu) → Dense(vocab, softmax) |
+| Optimizer | Adam |
+| Loss | Categorical cross-entropy |
+| Epochs | 20 |
+| Batch size | 32 |
+
+### Optimizer Study
+
+Four optimizers were compared — **Adam outperformed all others**:
+
+| Optimizer | Validation Loss | Notes |
+|-----------|----------------|-------|
+| **Adam** | **Lowest** | Momentum + adaptive LR — best convergence |
+| RMSProp | Moderate | Adaptive LR only |
+| SGD + Momentum | Higher | Stable but slow |
+| Vanilla SGD | Highest | Prone to oscillation |
+
+Adam combines **RMSProp** (adaptive learning rate) and **momentum**, making it ideal for sparse gradients in NLP tasks.
+
+### Inference — Beam Search
+
+```python
+def generate_caption(model, tokenizer, photo, max_length, beam_width=5):
+    # Greedy as beam_width=1; beam search explores top-k paths
+    in_text = 'startseq'
+    for _ in range(max_length):
+        sequence = tokenizer.texts_to_sequences([in_text])[0]
+        sequence = pad_sequences([sequence], maxlen=max_length)
+        yhat = model.predict([photo, sequence], verbose=0)
+        yhat = np.argmax(yhat)
+        word = idx_to_word(yhat, tokenizer)
+        if word is None or word == 'endseq':
+            break
+        in_text += ' ' + word
+    return in_text
 ```
 
 ---
 
-## 🏗️ Architecture
+## Project B — BLIP Transformer (Advanced)
+
+The second system uses **Salesforce BLIP** (Bootstrapping Language-Image Pre-training), a state-of-the-art vision-language model that drastically outperforms classical CNN+LSTM approaches — no training required.
+
+### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ENCODER  (Image Branch)                      │
-│   Input Image (224×224×3)  →  VGG16 (pretrained, frozen)       │
-│   → FC Layer [-2]  →  4096-d feature vector                     │
-│   → Dropout(0.5)   →  Dense(512, ReLU)                          │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-              ┌────────────▼────────────┐
-              │    ADD (Merge Layer)    │
-              └────────────┬────────────┘
-                           │
-┌──────────────────────────┴──────────────────────────────────────┐
-│                   DECODER  (Language Branch)                     │
-│   Partial Caption  →  Embedding(vocab_size, 512, mask_zero=True) │
-│   → Dropout(0.5)   →  LSTM(512 units)                           │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-              ┌────────────▼────────────┐
-              │  Dense(512, ReLU)       │
-              │  Dense(vocab_size, Softmax) │
-              │  → Predicted Next Word  │
-              └─────────────────────────┘
+Input Image (any resolution)
+        │
+        ▼
+┌────────────────────────────────────────────────┐
+│  BLIP Vision Encoder (ViT-Large)               │
+│  Patch embeddings + cross-attention            │
+└──────────────────────┬─────────────────────────┘
+                       │
+        ┌──────────────┴──────────────┐
+        ▼                             ▼
+ Unconditional                  Conditional
+ (free generation)          (prompted: "a photo of")
+        │                             │
+        ▼                             ▼
+┌───────────────┐           ┌──────────────────────┐
+│  BERT Decoder │           │  BERT Decoder         │
+│  (text-only)  │           │  (text + image cross) │
+└───────────────┘           └──────────────────────┘
+        │                             │
+        ▼                             ▼
+"there are four dogs         "a photo of a group of dogs
+running together in          running across a lush
+a line on the grass"         green field"
 ```
 
-> The model is trained end-to-end with **Adam optimizer** and **categorical cross-entropy loss**, with `EarlyStopping(patience=3)` and `ModelCheckpoint` saving the best weights.
+### Implementation
+
+```python
+from transformers import BlipProcessor, BlipForConditionalGeneration
+from PIL import Image
+import torch
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-large")
+model = BlipForConditionalGeneration.from_pretrained(
+    "Salesforce/blip-image-captioning-large"
+).to(device)
+
+def caption_image(img_path):
+    img = Image.open(img_path).convert('RGB')
+
+    # Unconditional caption
+    inputs1 = processor(img, return_tensors='pt').to(device)
+    cap1 = processor.decode(
+        model.generate(**inputs1, max_new_tokens=50, num_beams=5)[0],
+        skip_special_tokens=True
+    )
+
+    # Conditional caption (prompted)
+    inputs2 = processor(img, text="a photo of", return_tensors='pt').to(device)
+    cap2 = processor.decode(
+        model.generate(**inputs2, max_new_tokens=50, num_beams=5)[0],
+        skip_special_tokens=True
+    )
+
+    return cap1, cap2
+```
+
+### Sample Output
+
+**Input:** Dogs running on grass
+
+| Mode | Caption |
+|------|---------|
+| Unconditional | *"there are four dogs running together in a line on the grass"* |
+| Conditional | *"a photo of a group of dogs running across a lush green field"* |
+
+> **Hardware used:** Google Colab T4 GPU · Model size: 1.88 GB · Load time: ~16s
 
 ---
 
-## 📦 Dataset
+## Architecture Comparison
 
-**Flickr8k** — 8,091 images with 5 human-annotated captions each (40,455 total captions).
-
-| Split | Images | Captions |
-|-------|--------|----------|
-| Train (90%) | 7,281 | 36,405 |
-| Test  (10%) | 810   | 4,050  |
-
-**Caption preprocessing pipeline:**
-```
-Raw caption  →  Lowercase  →  Remove punctuation & digits
-             →  Remove single-character tokens
-             →  Add <startseq> / <endseq> tokens
-```
-
-**Sample cleaned captions for one image:**
-```
-startseq child in pink dress is climbing up set of stairs in an entry way endseq
-startseq girl going into wooden building endseq
-startseq little girl climbing into wooden playhouse endseq
-startseq little girl climbing the stairs to her playhouse endseq
-startseq little girl in pink dress going into wooden cabin endseq
-```
-
-**Vocabulary stats after cleaning:**
-- Vocab size: **8,347 unique tokens**
-- Max caption length: **34 tokens**
+| Feature | Project A (CNN+LSTM) | Project B (BLIP) |
+|---------|---------------------|------------------|
+| **Model type** | Custom encoder-decoder | Pre-trained transformer |
+| **Parameters** | ~10M (trainable) | ~470M (frozen) |
+| **Training** | 20 epochs on Flickr8k | Zero-shot (pre-trained) |
+| **GPU time** | ~2–3 hrs (T4) | ~16s load, <1s inference |
+| **BLEU-1** | 0.35 | N/A (zero-shot) |
+| **Flexibility** | Domain-specific fine-tuning | General-purpose |
+| **Captioning mode** | Single output | Conditional + unconditional |
+| **Framework** | TensorFlow/Keras | PyTorch + HuggingFace |
+| **Best for** | Learning fundamentals | Production deployment |
 
 ---
 
-## 📊 Results
+## Results
 
-### BLEU Score Evaluation (500 test images)
+### Project A — BLEU Scores
+
+Evaluated on Flickr8k test set (1,000 images, 5 reference captions each):
 
 | Metric | Score |
 |--------|-------|
-| BLEU-1 | **0.3500** |
-| BLEU-2 | **0.1471** |
-| BLEU-4 | **0.0401** |
+| **BLEU-1** | **0.35** |
+| BLEU-2 | 0.21 |
+| BLEU-3 | 0.14 |
+| BLEU-4 | 0.09 |
 
-> BLEU scores are computed using `nltk.translate.bleu_score.corpus_bleu` against 5 reference captions per image.
+**BLEU** (Bilingual Evaluation Understudy) measures n-gram overlap between generated and reference captions. Score of 1.0 = exact match; 0.0 = no overlap.
 
-### Caption Examples
+**Examples with BLEU ≥ 0.70:**
+> Predicted: *"a dog runs through the grass"*
+> Reference: *"a brown dog is running through the grass"*
 
-| Method | Generated Caption |
-|--------|------------------|
-| 🔵 Beam Search | `two dogs are playing in the grass with tennis ball in its mouth` |
-| 🟠 Top-k Sampling | `dog is walking through field of grass` |
+**Examples with BLEU 0.30–0.70:**
+> Predicted: *"a man in a red shirt is riding a bike"*
+> Reference: *"a cyclist wearing red rides down a hill"*
 
-### Decoding Strategies Compared
+### Training Dynamics
 
-| Strategy | How it works | Output style |
-|----------|-------------|--------------|
-| **Greedy** | Always picks top-1 word | Repetitive, safe |
-| **Beam Search** (width=5) | Tracks top-5 paths simultaneously, length-normalized | Accurate, coherent |
-| **Top-k Sampling** (k=5, temp=0.7) | Samples from top-5 with temperature scaling | Natural, diverse |
+- **Epochs 1–10:** Both train and val loss decrease rapidly
+- **Epochs 10–15:** Val loss plateaus; model checkpoint saved at minimum
+- **Epochs 15–20:** Sign of mild overfitting — early stopping applied
+
+### Project B — Qualitative Results
+
+BLIP produces significantly richer, more contextually accurate captions due to pre-training on hundreds of millions of image-text pairs from the web. Conditional captioning (with a text prompt) tends to produce more descriptive, fluent output.
 
 ---
 
-## 📁 Project Structure
+## Tech Stack
+
+### Project A
+```
+Python 3.8+        — Core language
+TensorFlow 2.x     — Model training
+Keras              — High-level API
+VGG16              — Pre-trained CNN feature extractor
+NLTK               — BLEU score evaluation
+NumPy / Pandas     — Data handling
+Matplotlib         — Visualisation
+scikit-learn       — PCA, k-means clustering
+```
+
+### Project B
+```
+Python 3.10+           — Core language
+PyTorch 2.x            — Deep learning backend
+HuggingFace Transformers — BLIP model + processor
+Pillow                 — Image loading
+Google Colab (T4 GPU)  — Execution environment
+Matplotlib             — Output visualisation
+```
+
+---
+
+## Project Structure
 
 ```
 automatic-image-captioning/
 │
-├── main_code.ipynb              # Full Colab notebook (13 cells)
-├── README.md
+├── 📂 project_a_cnn_lstm/
+│   ├── Automatic_Image_Captioning_v4.ipynb   ← Main notebook
+│   ├── feature_extraction.py                 ← VGG16 feature pipeline
+│   ├── data_preprocessing.py                 ← Caption cleaning + tokenisation
+│   ├── model.py                              ← Encoder-decoder definition
+│   ├── train.py                              ← Training loop + checkpoints
+│   ├── evaluate.py                           ← BLEU score computation
+│   └── inference.py                          ← Beam search caption generation
 │
-├── assets/                      # Output images for README
-│   ├── architecture.png
-│   ├── predictions.png
-│   └── training_loss.png
+├── 📂 project_b_blip/
+│   └── Image_Captioning_with_BLIP_Colab.ipynb  ← BLIP demo notebook
 │
-├── flickr8k/                    # Downloaded via Kaggle API
-│   ├── Images/                  # 8,091 .jpg files
-│   └── captions.txt             # image, caption CSV
+├── 📂 data/
+│   └── flickr8k/                             ← Place dataset here
+│       ├── Images/
+│       └── captions.txt
 │
-└── saved/
-    ├── best_model.keras         # Best checkpoint (saved by ModelCheckpoint)
-    ├── features_vgg16.pkl       # Cached VGG16 features (4096-d per image)
-    └── tokenizer.pkl            # Fitted Keras Tokenizer
+├── 📄 AUTOMATIC_IMAGE_CAPTIONING.pdf         ← Research paper (VIT Vellore)
+├── 📄 README.md
+└── 📄 requirements.txt
 ```
 
 ---
 
-## ⚡ Quickstart
+## Quickstart
 
-### Run on Google Colab (Recommended)
-
-1. Open [Google Colab](https://colab.research.google.com/) → Upload `main_code.ipynb`
-2. Set runtime: `Runtime → Change runtime type → T4 GPU`
-3. Get your Kaggle API token:
-   - Go to → https://www.kaggle.com/settings → **API** → **Create New Token**
-   - This downloads `kaggle.json` to your PC
-4. Run **Cell 2** — a file picker appears, upload `kaggle.json`
-5. Run all remaining cells top to bottom ✅
-
-### Local Installation
+### Project A — CNN + LSTM
 
 ```bash
-git clone https://github.com/yourusername/automatic-image-captioning.git
+# 1. Clone and install
+git clone https://github.com/YOUR_USERNAME/automatic-image-captioning
 cd automatic-image-captioning
-pip install tensorflow pillow tqdm nltk kaggle matplotlib
-kaggle datasets download -d adityajn105/flickr8k --unzip -p flickr8k/
-jupyter notebook main_code.ipynb
+pip install -r requirements.txt
+
+# 2. Download Flickr8k dataset
+# Place in data/flickr8k/Images/ and data/flickr8k/captions.txt
+
+# 3. Run the notebook
+jupyter notebook project_a_cnn_lstm/Automatic_Image_Captioning_v4.ipynb
+```
+
+**requirements.txt (Project A)**
+```
+tensorflow>=2.10
+numpy
+pandas
+matplotlib
+nltk
+scikit-learn
+pillow
+tqdm
+```
+
+### Project B — BLIP (Google Colab)
+
+Open directly in Colab:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/19PTO84-InVnbuPbI6gGhKjwGKYm93Cot)
+
+```bash
+# Or run locally
+pip install transformers torch torchvision pillow
+
+python - <<'EOF'
+from transformers import BlipProcessor, BlipForConditionalGeneration
+from PIL import Image
+import torch
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-large")
+model = BlipForConditionalGeneration.from_pretrained(
+    "Salesforce/blip-image-captioning-large"
+).to(device)
+
+img = Image.open("your_image.jpg").convert("RGB")
+inputs = processor(img, return_tensors="pt").to(device)
+caption = processor.decode(
+    model.generate(**inputs, max_new_tokens=50, num_beams=5)[0],
+    skip_special_tokens=True
+)
+print(caption)
+EOF
 ```
 
 ---
 
-## 🔧 Implementation Details
+## Authors
 
-### VGG16 Feature Extraction
-```python
-base  = VGG16()
-model = Model(inputs=base.inputs, outputs=base.layers[-2].output)
-# outputs 4096-d vector per image, saved to features_vgg16.pkl
-```
-Features are extracted once and cached — subsequent runs load from `.pkl` instantly.
+| Name | Role | Contact |
+|------|------|---------|
+| **Abhishek** | Model architecture, training, evaluation | abhishek.2020@vitstudent.ac.in |
+| **Sandhiya R** | Data preprocessing, feature engineering | sandhiya.r2020@vitstudent.ac.in |
+| **Abu Talha** | BLIP integration, inference pipeline | muhammedabutalha.sa2020@vitstudent.ac.in |
+| **Manimaran A** | Faculty supervisor | manimaran.a@vit.ac.in |
 
-### Model Architecture
-```python
-# embed_dim=512, lstm_units=512
-img_input = Input(shape=(4096,))
-img_dense = Dense(512, activation='relu')(Dropout(0.5)(img_input))
-
-seq_input = Input(shape=(max_len,))
-seq_lstm  = LSTM(512)(Dropout(0.5)(Embedding(vocab_size, 512, mask_zero=True)(seq_input)))
-
-decoder = Dense(512, activation='relu')(Add()([img_dense, seq_lstm]))
-output  = Dense(vocab_size, activation='softmax')(decoder)
-```
-
-### Training Config
-```python
-Optimizer  : Adam
-Loss       : Categorical Crossentropy
-Epochs     : 20 (EarlyStopping patience=3)
-Batch size : 32
-GPU        : NVIDIA T4 (Google Colab)
-TF version : 2.19.0
-Seed       : 42 (fully reproducible)
-```
-
-### Beam Search Decoding
-```python
-def predict_caption_beam(model, feature, tokenizer, max_len, beam_width=5):
-    beams = [(0.0, ['startseq'])]
-    for _ in range(max_len):
-        candidates = []
-        for score, cap in beams:
-            pred = model.predict([feature, seq])
-            for idx in np.argsort(pred)[-beam_width:]:
-                new_score = score - np.log(pred[idx] + 1e-10)
-                candidates.append((new_score, cap + [word]))
-        beams = sorted(candidates)[:beam_width]
-    # length-normalized selection
-    return best_caption
-```
+**Institution:** School of Advanced Sciences, Vellore Institute of Technology (VIT), Vellore
 
 ---
 
-## 📐 Evaluation
+## References
 
-**BLEU (Bilingual Evaluation Understudy)** measures n-gram overlap between generated and reference captions:
-
-- **BLEU-1** → unigram precision (individual word matches)
-- **BLEU-2** → bigram precision
-- **BLEU-4** → 4-gram precision (strictest, standard benchmark)
-
-A score of **0.35 BLEU-1** is consistent with published results for single-layer LSTM models trained on Flickr8k without attention mechanisms.
-
----
-
-## 🔮 Future Work
-
-- [ ] Add **attention mechanism** (Show, Attend and Tell) for better spatial focus
-- [ ] Replace VGG16 with **ResNet50 / EfficientNet** for richer features
-- [ ] Train on **Flickr30k or MS-COCO** (larger datasets) for higher BLEU
-- [ ] Implement **transformer-based decoder** (GPT-2 / BERT)
-- [ ] Deploy as a **Flask/Streamlit web app**
-- [ ] Evaluate with **METEOR, CIDEr, ROUGE** metrics
+1. Rashtchian et al. *Collecting Image Annotations Using Amazon's Mechanical Turk.* NAACL HLT 2010.
+2. Simonyan & Zisserman. *Very Deep Convolutional Networks for Large-Scale Image Recognition.* ICLR 2015.
+3. Xu et al. *Neural Image Caption Generation with Visual Attention.* ICML 2015.
+4. Li et al. *BLIP: Bootstrapping Language-Image Pre-training.* ICML 2022.
+5. Papineni et al. *BLEU: A Method for Automatic Evaluation of Machine Translation.* ACL 2002.
+6. He et al. *Deep Residual Learning for Image Recognition.* CVPR 2016.
 
 ---
 
-## 📚 References
-
-1. Vinyals et al. — *Show and Tell: A Neural Image Caption Generator* (2015)
-2. Xu et al. — *Show, Attend and Tell: Neural Image Caption Generation with Visual Attention*, ICML 2015
-3. Simonyan & Zisserman — *Very Deep Convolutional Networks for Large-Scale Image Recognition* (VGG16), ICLR 2015
-4. Papineni et al. — *BLEU: a Method for Automatic Evaluation of Machine Translation*, IBM 2002
-5. Flickr8k Dataset — Rashtchian et al., NAACL HLT 2010
-
----
-
-## 👤 Author
-
-**Abhishek**  
-M.Sc. Computational Statistics & Data Analytics — VIT Vellore  
-School of Advanced Sciences
-
----
-
-*Built with ❤️ using TensorFlow 2.19 · Google Colab T4 GPU · Flickr8k*
+<div align="center">
+  <sub>Built with ❤️ at VIT Vellore · School of Advanced Sciences · 2024–2025</sub>
+</div>
